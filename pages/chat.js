@@ -1,6 +1,8 @@
 import { Box, Text, TextField, Image, Button } from '@skynexui/components';
 import React from 'react';
 import appConfig from '../config.json';
+import { useRouter } from 'next/router';
+import { SendSticker } from '../src/components/SendSticker';
 import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTY0MzY0MjkyMywiZXhwIjoxOTU5MjE4OTIzfQ.jbeD9NUX-i0kOanwx6b8t5FwaoOXgjj72BTxHSFc5v8';
@@ -9,8 +11,17 @@ const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 //const dadosSupabase = supabaseClient.from('messages').select('*');
 
+function realTime(addmessage) {
+    return supabaseClient.from('messages').on('INSERT', (aswerLive) => {
+        addmessage(aswerLive.new);
+    })
+    .subscribe();
+}
+
 
 export default function ChatPage() {
+    const roteamento = useRouter();
+    const usuarioLogado = roteamento.query.username;
     const [message, setMessage] = React.useState('');
     const [chatList, setchatList] = React.useState([]);
 
@@ -20,15 +31,28 @@ export default function ChatPage() {
           .select('*')
           .order('id', { ascending: false })
           .then(({ data }) => {
-            console.log('Dados da consulta:', data);
+            //console.log('Dados da consulta:', data);
             setchatList(data);
           });
+
+    const subscription = realTime((newMessage) => {
+              setchatList((newValue) => {
+                  return[
+                  newMessage,
+                  ...newValue,
+                ]
+                });
+          });
+          return () => {
+            subscription.unsubscribe();
+          }
+
       }, []);
     
       function handleNewMessage(newMessage) {
         const message = {
           // id: chatList.length + 1,
-          de: 'kyaramero',
+          de: usuarioLogado,
           text: newMessage,
         };
     
@@ -39,12 +63,8 @@ export default function ChatPage() {
             message
           ])
           .then(({ data }) => {
-            console.log('Criando mensagem: ', data);
-            setchatList([
-              data[0],
-              ...chatList,
-            ]);
-          });
+               console.log('Criando mensagem: ', data);
+         });
     
         setMessage('');
       }
@@ -97,7 +117,7 @@ export default function ChatPage() {
                         }}
                     >
                         <TextField
-                            placeholder="Insira sua mensagem aqui..."
+                            placeholder="Write here..."
                             value={message}
                             onChange={(event) => {
                                 const valor = event.target.value;
@@ -121,6 +141,12 @@ export default function ChatPage() {
                                 color: appConfig.theme.colors.neutrals[200],
                             }}
                         />
+                         <SendSticker
+                            onStickerClick={(sticker) => {
+                                // console.log('[USANDO O COMPONENTE] Salva esse sticker no banco', sticker);
+                                handleNewMessage(':sticker: ' + sticker);
+                            }}
+                            />
                         <Button
                                 type='submit'
                                 label='➜'
@@ -219,7 +245,13 @@ function MessageList(props) {
                                 {(new Date().toLocaleDateString())}
                             </Text>
                         </Box>
-                        {message.text}
+                            {message.text.startsWith(':sticker:')
+                            ? (
+                                <Image src={message.text.replace(':sticker:', '')} width='150'/>
+                            )
+                            : (
+                                message.text
+                            )}
                     </Text>
                 );
             })}
